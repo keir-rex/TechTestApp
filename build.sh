@@ -6,10 +6,12 @@ fi
 
 mkdir -p dist
 
-go build -o TechTestApp .
+CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo .
 
 cp TechTestApp dist/
 cp -r assets dist/
 cp conf.toml dist/
 
 rm TechTestApp
+
+docker build -t="techtest" .
