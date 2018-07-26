@@ -26,9 +26,17 @@ import (
 	"fmt"
 
 	"github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus"
 
 	_ "github.com/lib/pq"
 	"github.com/vibrato/TechTestApp/model"
+)
+
+var taskCount = prometheus.NewGauge(
+	prometheus.GaugeOpts{
+		Name: "vibratott_task_count",
+		Help: "Current number of tasks in the list",
+	},
 )
 
 // Config - configuration for the db package
@@ -38,6 +46,10 @@ type Config struct {
 	DbName     string
 	DbHost     string
 	DbPort     string
+}
+
+func init() {
+	prometheus.MustRegister(taskCount)
 }
 
 func getDbInfo(cfg Config) string {
@@ -69,7 +81,7 @@ func RebuildDb(cfg Config) error {
 	}
 
 	query = fmt.Sprintf(`CREATE DATABASE %s
-WITH 
+WITH
 OWNER = %s
 ENCODING = 'UTF8'
 LC_COLLATE = 'en_US.utf8'
@@ -78,6 +90,7 @@ TABLESPACE = pg_default
 CONNECTION LIMIT = -1;`, cfg.DbName, cfg.DbUser)
 
 	fmt.Println(query)
+	taskCount.Set(0)
 
 	_, err = db.Query(query)
 
@@ -197,6 +210,7 @@ func getSeedTasks() []model.Task {
 func GetAllTasks(cfg Config) ([]model.Task, error) {
 
 	var tasks []model.Task
+	var count float64 = 0
 
 	dbinfo := getDbInfo(cfg)
 
@@ -220,8 +234,10 @@ func GetAllTasks(cfg Config) ([]model.Task, error) {
 		rows.Scan(&task.ID, &task.Complete, &task.Priority, &task.Title)
 
 		tasks = append(tasks, task)
+		count += 1
 	}
 
+	taskCount.Set(count)
 	return tasks, nil
 }
 
@@ -243,6 +259,7 @@ func AddTask(cfg Config, task model.Task) (model.Task, error) {
 		return task, err
 	}
 
+	taskCount.Inc()
 	return task, nil
 }
 
@@ -279,8 +296,8 @@ func DeleteTask(cfg Config, task model.Task) error {
 		return errors.New("Nothing was deleted")
 	}
 
+	taskCount.Sub(float64(affect))
 	return nil
-
 }
 
 func UpdateTask(cfg Config, task model.Task) (model.Task, error) {

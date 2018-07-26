@@ -26,9 +26,15 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/urfave/negroni"
+	negroniprometheus "github.com/zbindenren/negroni-prometheus"
+
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/vibrato/TechTestApp/db"
 	"github.com/vibrato/TechTestApp/model"
@@ -55,9 +61,16 @@ func Start(cfg Config, listener net.Listener) {
 	mainRouter.Handle("/api/task/{id:[0-9]+}/", deleteTask(cfg)).Methods("DELETE")
 	mainRouter.Handle("/api/task/", allTasksHandler(cfg))
 	mainRouter.Handle("/healthcheck/", healthcheckHandler(cfg))
+	mainRouter.Handle("/metrics", prometheus.Handler())
 	mainRouter.Handle("/", indexHandler())
-	http.Handle("/", mainRouter)
 
+	mainRouter.Use(handlers.RecoveryHandler())
+
+	n := negroni.New()
+	n.Use(negroniprometheus.NewMiddleware("vibratott"))
+	n.UseHandler(mainRouter)
+
+	http.Handle("/", handlers.CombinedLoggingHandler(os.Stdout, n))
 	go server.Serve(listener)
 }
 
